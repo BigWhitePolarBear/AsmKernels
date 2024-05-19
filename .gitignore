@@ -1,0 +1,7 @@
+fixvhdw*
+*.vhd
+Nasmide
+nasmide*
+*.bin
+*.lst
+asm8086.xml

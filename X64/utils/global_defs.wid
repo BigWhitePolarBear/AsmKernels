@@ -1,0 +1,65 @@
+; Address definitions, at least 16-byte aligned! Addresses related to paging must be 4KB aligned!
+
+%ifndef _GLOBAL_DEFS_
+   %define _GLOBAL_DEFS_
+
+   SDA_PHY_ADDR        equ     0x00007e00              ; Start physical address of System Data Area
+   PML5_PHY_ADDR       equ     0x00009000              ; Kernel 5-level page map level 5 table physical address
+   PML4_PHY_ADDR       equ     0x0000a000              ; Kernel 4-level page map level 4 table physical address
+   PDPT_PHY_ADDR       equ     0x0000b000              ; Page Directory Pointer Table physical address for the low 2MB
+   PDT_PHY_ADDR        equ     0x0000c000              ; Page Directory Table physical address for the low 2MB
+   PT_PHY_ADDR         equ     0x0000d000              ; Page Table physical address for the low 2MB
+   IDT_PHY_ADDR        equ     0x0000e000              ; Interrupt Descriptor Table physical address
+   LDR_PHY_ADDR        equ     0x0000f000              ; Start physical address of the kernel loader
+   GDT_PHY_ADDR        equ     0x00010000              ; Global Descriptor Table physical address
+   CORE_PHY_ADDR       equ     0x00020000              ; Start physical address of the kernel
+   COR_PDPT_ADDR       equ     0x00100000              ; Page Directory Pointer Table for the kernel starts from this physical address
+
+   LDR_START_SECTOR    equ     1                       ; Start sector of the kernel loader on the hard disk
+   COR_START_SECTOR    equ     9                       ; Start sector of the kernel program on the hard disk
+
+   ; Virtual memory space starts at linear address 0xffff800000000000
+   UPPER_LINEAR_START  equ     0xffff800000000000
+
+   UPPER_CORE_LINEAR   equ     UPPER_LINEAR_START + CORE_PHY_ADDR     ; High linear address of the kernel
+   UPPER_TEXT_VIDEO    equ     UPPER_LINEAR_START + 0x000b8000        ; High linear address of the text display buffer
+   UPPER_SDA_LINEAR    equ     UPPER_LINEAR_START + SDA_PHY_ADDR      ; High linear address of the system data area
+   UPPER_GDT_LINEAR    equ     UPPER_LINEAR_START + GDT_PHY_ADDR      ; High linear address of the GDT
+   UPPER_IDT_LINEAR    equ     UPPER_LINEAR_START + IDT_PHY_ADDR      ; High linear address of the IDT
+
+   ; Definitions of selectors related to the Global Descriptor Table and constants related to memory management
+   CORE_CODE64_SEL     equ     0x0018                  ;=00） Selector of the kernel code segment 
+   CORE_STACK64_SEL    equ     0x0020                  ;=00） Selector of the kernel stack segment
+   RESVD_DESC_SEL      equ     0x002b                  ; Reserved descriptor selector
+   USER_CODE64_SEL     equ     0x003b                  ; Selector of the code segment of privilege level 3
+   USER_STACK64_SEL    equ     0x0033                  ; Selector of the stack segment of privilege level 3
+
+   PHY_MEMORY_SIZE     equ     32                      ; Physical memory size (MB), at least 3MB is required
+   CORE_ALLOC_START    equ     0xffff800000200000      ; Start address of memory allocation in the high-end virtual address space (kernel)
+   USER_ALLOC_START    equ     0x0000000000000000      ; Start address of memory allocation at the low end of the virtual address space of each task
+
+   ; When creating a task, a physical page is required to allocate a new task's 4-level page map level 4 table, and a temporary linear address is required to initialize this page
+   NEW_PML4_LINEAR     equ     0xffffff7ffffff000      ; Linear address used to map the 4-level page map level 4 table of the new task
+
+   LAPIC_START_ADDR    equ     0xffffff7fffffe000      ; Start linear address of the LOCAL APIC register
+   IOAPIC_START_ADDR   equ     0xffffff7fffffd000      ; Start linear address of the I/O APIC register
+
+   AP_START_UP_ADDR    equ     0x0000f000              ; Physical address of the application processor (AP) startup code
+
+   SUGG_PREEM_SLICE    equ     55                      ; Recommended task/thread preemption time slice length (ms)
+
+   ; Spin lock macro in a multi-processor environment. Two parameters are required: a register and a lock variable of the corresponding width
+   %macro   SET_SPIN_LOCK 2                            ; Two parameters, register %1 and lock variable %2
+            %%spin_lock:
+                       cmp %2, 0                       ; Is the lock in the released state?
+                       je %%get_lock                   ; Get the lock
+                       pause
+                       jmp %%spin_lock                 ; Continue to try to get the lock
+            %%get_lock:
+                       mov %1, 1
+                       xchg %1, %2
+                       cmp %1, 0                       ; Was zero before the exchange?
+                       jne %%spin_lock                 ; Another program preemptively locks, fail and try again
+   %endmacro
+
+%endif

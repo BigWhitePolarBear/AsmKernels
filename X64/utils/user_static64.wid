@@ -1,74 +1,74 @@
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-         bits 64
+	bits 64
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-bin64_to_dec:                                     ; Transform binary number to decimal string.
-                                                  ; In: R8=64-bit binary number
-                                                  ;     RBX=destination buffer linear address
-         push rax
-         push rbx
-         push rcx
-         push rdx
-         push r8
+bin64_to_dec:										; Transform binary number to decimal string.
+													; In: R8=64-bit binary number
+													;     RBX=destination buffer linear address
+	push rax
+	push rbx
+	push rcx
+	push rdx
+	push r8
 
-         mov rax, r8
-         mov r8, 10
-         xor rcx, rcx
+	mov rax, r8
+	mov r8, 10
+	xor rcx, rcx
 
-  .next_div:
-         xor rdx, rdx
-         div r8
-         push rdx                                 ; Save the decomposed digit
-         inc rcx                                  ; Increment the number of times the stack is pressed
-         or rax, rax                              ; Is the quotient 0?
-         jz .rotate
-         jmp .next_div
+	.next_div:
+		xor rdx, rdx
+		div r8
+		push rdx									; Save the decomposed digit
+		inc rcx										; Increment the number of times the stack is pressed
+		or rax, rax									; Is the quotient 0?
+		jz .rotate
+		jmp .next_div
 
-  .rotate:
-         pop rdx
-         add dl, 0x30                             ; Digit converted to ASCII code
-         mov [rbx], dl
-         inc rbx
-         loop .rotate
+	.rotate:
+		pop rdx
+		add dl, 0x30								; Digit converted to ASCII code
+		mov [rbx], dl
+		inc rbx
+		loop .rotate
 
-         mov byte [rbx], 0
+	mov byte [rbx], 0
 
-         pop r8
-         pop rdx
-         pop rcx
-         pop rbx
-         pop rax
+	pop r8
+	pop rdx
+	pop rcx
+	pop rbx
+	pop rax
 
-         ret                                      ; Return within the segment
+	ret												; Return within the segment
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-string_concatenates:                              ; Concatenate the source string to the end of the destination string
-                                                  ; In: RSI=source string linear address
-                                                  ;     RDI=destination string linear address
-         push rax
-         push rsi
-         push rdi
+string_concatenates:								; Concatenate the source string to the end of the destination string
+													; In: RSI=source string linear address
+													;     RDI=destination string linear address
+	push rax
+	push rsi
+	push rdi
 
-  .r0:
-         cmp byte [rdi], 0
-         jz .r1
-         inc rdi
-         jmp .r0
+	.r0:
+		cmp byte [rdi], 0
+		jz .r1
+		inc rdi
+		jmp .r0
 
-  .r1:
-         mov al, [rsi]
-         mov [rdi], al
-         cmp al, 0
-         jz .r2
-         inc rsi
-         inc rdi
-         jmp .r1
+	.r1:
+		mov al, [rsi]
+		mov [rdi], al
+		cmp al, 0
+		jz .r2
+		inc rsi
+		inc rdi
+		jmp .r1
 
-  .r2:
-         pop rdi
-         pop rsi
-         pop rax
+	.r2:
+		pop rdi
+		pop rsi
+		pop rax
 
-         ret
+		ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

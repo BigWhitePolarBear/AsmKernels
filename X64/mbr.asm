@@ -88,9 +88,10 @@ SECTION mbr vstart=0x00007c00
 		hlt
 
 ;-------------------------------------------------------------------------------
-	msg0	db "Disk error.", 0x0d, 0x0a
-	msg1	db "Missing loader.", 0x0d, 0x0a
-	mend:
+msg0	db "Disk error.", 0x0d, 0x0a
+msg1	db "Missing loader.", 0x0d, 0x0a
+mend:
 ;-------------------------------------------------------------------------------
+; fill it up to 512 bytes
 	times 510-($-$$) db 0
 	db 0x55, 0xaa

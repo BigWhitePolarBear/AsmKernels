@@ -1,895 +1,897 @@
 %include ".\utils\global_defs.wid"
 
-         bits 64
+	bits 64
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-_prn_str_locker dq 0                              ; Print locker
+_prn_str_locker dq 0								; Print locker
 
-put_string64:                                     ; Display a 0-terminated string and move the cursor
-                                                  ; In: RBX=Linear address of the string
-         push rbx
-         push rcx
+put_string64:										; Display a 0-terminated string and move the cursor
+													; In: RBX=Linear address of the string
+	push rbx
+	push rcx
 
-         pushfq                                   ; -->A
-         cli
-         SET_SPIN_LOCK rcx, qword [rel _prn_str_locker]
+	pushfq											; -->A
+	cli
+	SET_SPIN_LOCK rcx, qword [rel _prn_str_locker]
 
-  .getc:
-         mov cl, [rbx]
-         or cl, cl                                ; Check the end flag of the string (0)
-         jz .exit                                 ; Done, return
-         call put_char
-         inc rbx
-         jmp .getc
+	.getc:
+		mov cl, [rbx]
+		or cl, cl									; Check the end flag of the string (0)
+		jz .exit									; Done, return
+		call put_char
+		inc rbx
+		jmp .getc
 
-  .exit:
-         mov qword [rel _prn_str_locker], 0       ; Release lock
-         popfq                                    ; A
+	.exit:
+		mov qword [rel _prn_str_locker], 0			; Release lock
+		popfq										; A
 
-         pop rcx
-         pop rbx
+		pop rcx
+		pop rbx
 
-         ret                                      ; Return in segment
+		ret											; Return in segment
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-put_char:                                         ; Display a character at the current cursor position and advance the cursor
-                                                  ; In: CL=Character ASCII code
-         push rax
-         push rbx
-         push rcx
-         push rdx
-         push rsi
-         push rdi
+put_char:											; Display a character at the current cursor position and advance the cursor
+													; In: CL=Character ASCII code
+	push rax
+	push rbx
+	push rcx
+	push rdx
+	push rsi
+	push rdi
 
-         ;以下取当前光标位置
-         mov dx, 0x3d4
-         mov al, 0x0e
-         out dx, al
-         inc dx                                   ; 0x3d5
-         in al, dx                                ; High byte
-         mov ah, al
+	; Below to get the current cursor position
+	mov dx, 0x3d4
+	mov al, 0x0e
+	out dx, al
+	inc dx											; 0x3d5
+	in al, dx										; High byte
+	mov ah, al
 
-         dec dx                                   ; 0x3d4
-         mov al, 0x0f
-         out dx, al
-         inc dx                                   ; 0x3d5
-         in al, dx                                ; Low byte
-         mov bx, ax                               ; BX=16-bit number representing cursor position
-         and rbx, 0x000000000000ffff              ; Prepare to access video memory using 64-bit addressing
+	dec dx											; 0x3d4
+	mov al, 0x0f
+	out dx, al
+	inc dx											; 0x3d5
+	in al, dx										; Low byte
+	mov bx, ax										; BX=16-bit number representing cursor position
+	and rbx, 0x000000000000ffff						; Prepare to access video memory using 64-bit addressing
 
-         cmp cl, 0x0d                             ; Carriage return?
-         jnz .put_0a
-         mov ax, bx
-         mov bl, 80
-         div bl
-         mul bl
-         mov bx, ax
-         jmp .set_cursor
+	cmp cl, 0x0d									; Carriage return?
+	jnz .put_0a
+	mov ax, bx
+	mov bl, 80
+	div bl
+	mul bl
+	mov bx, ax
+	jmp .set_cursor
 
-  .put_0a:
-         cmp cl, 0x0a                             ; Line feed?
-         jnz .put_other
-         add bx, 80
-         jmp .roll_screen
+	.put_0a:
+		cmp cl, 0x0a								; Line feed?
+		jnz .put_other
+		add bx, 80
+		jmp .roll_screen
 
-  .put_other:                                     ; Normal display character
-         shl bx, 1
-         mov rax, UPPER_TEXT_VIDEO                ; Defined in global_defs.wid
-         mov [rax + rbx], cl
+	.put_other:										; Normal display character
+		shl bx, 1
+		mov rax, UPPER_TEXT_VIDEO					; Defined in global_defs.wid
+		mov [rax + rbx], cl
 
-         ;以下将光标位置推进一个字符
-         shr bx, 1
-         inc bx
+	; Below to advance the cursor position by one character
+	shr bx, 1
+	inc bx
 
-  .roll_screen:
-         cmp bx, 2000                             ; Cursor out of screen? Scroll
-         jl .set_cursor
+	.roll_screen:
+		cmp bx, 2000								; Cursor out of screen? Scroll
+		jl .set_cursor
 
-         push bx
+		push bx
 
-         cld
-         mov rsi, UPPER_TEXT_VIDEO + 0xa0
-         mov rdi, UPPER_TEXT_VIDEO
-         mov rcx, 480
-         rep movsq
-         mov bx, 3840                             ; Clear the bottom line of the screen
-         mov rcx, 80
-  .cls:
-         mov rax, UPPER_TEXT_VIDEO
-         mov word[rax + rbx], 0x0720
-         add bx, 2
-         loop .cls
+		cld
+		mov rsi, UPPER_TEXT_VIDEO + 0xa0
+		mov rdi, UPPER_TEXT_VIDEO
+		mov rcx, 480
+		rep movsq
+		mov bx, 3840								; Clear the bottom line of the screen
+		mov rcx, 80
+		.cls:
+			mov rax, UPPER_TEXT_VIDEO
+			mov word[rax + rbx], 0x0720
+			add bx, 2
+			loop .cls
 
-         pop bx
-         sub bx, 80
+	pop bx
+	sub bx, 80
 
-  .set_cursor:
-         mov dx, 0x3d4
-         mov al, 0x0e
-         out dx, al
-         inc dx                                   ; 0x3d5
-         mov al, bh
-         out dx, al
-         dec dx                                   ; 0x3d4
-         mov al, 0x0f
-         out dx, al
-         inc dx                                   ; 0x3d5
-         mov al, bl
-         out dx, al
+	.set_cursor:
+		mov dx, 0x3d4
+		mov al, 0x0e
+		out dx, al
+		inc dx										; 0x3d5
+		mov al, bh
+		out dx, al
+		dec dx										; 0x3d4
+		mov al, 0x0f
+		out dx, al
+		inc dx										; 0x3d5
+		mov al, bl
+		out dx, al
 
-         pop rdi
-         pop rsi
-         pop rdx
-         pop rcx
-         pop rbx
-         pop rax
+	pop rdi
+	pop rsi
+	pop rdx
+	pop rcx
+	pop rbx
+	pop rax
 
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ; Display a 0-terminated string with a specified color at a specified position, only for printing graphic characters. Since the coordinate positions of printing in each program are different and do not interfere with each other, there is no need to add locks and mutual exclusion.
 _prnxy_locker dq 0
 
-put_cstringxy64:                                  ; In: RBX=String start address
-                                                  ;     DH=Row, DL=Column
-                                                  ;     R9B=Color attribute
-         push rax
-         push rbx
-         push rcx
-         push rdx
-         push r8
+put_cstringxy64:									; In: RBX=String start address
+													;     DH=Row, DL=Column
+													;     R9B=Color attribute
+	push rax
+	push rbx
+	push rcx
+	push rdx
+	push r8
 
-         ; Set the offset of the specified coordinate position in video memory
-         mov al, dh
-         mov ch, 160                              ; Each row has 80 characters, occupying 160 bytes
-         mul ch
-         shl dl, 1                                ; Each character (column) occupies 2 bytes, so multiply by 2
-         and dx, 0x00ff
-         add ax, dx                               ; Get the offset of the specified coordinate position in video memory
-         and rax, 0x000000000000ffff
+	; Set the offset of the specified coordinate position in video memory
+	mov al, dh
+	mov ch, 160										; Each row has 80 characters, occupying 160 bytes
+	mul ch
+	shl dl, 1										; Each character (column) occupies 2 bytes, so multiply by 2
+	and dx, 0x00ff
+	add ax, dx										; Get the offset of the specified coordinate position in video memory
+	and rax, 0x000000000000ffff
 
-         pushfq                                   ;-->A
-         cli
-         SET_SPIN_LOCK r8, qword [rel _prnxy_locker]
+	pushfq											;-->A
+	cli
+	SET_SPIN_LOCK r8, qword [rel _prnxy_locker]
 
-         mov r8, UPPER_TEXT_VIDEO                 ; The starting linear address of video memory
-  .nextc:
-         mov dl, [rbx]                            ; Get the character to be displayed
-         or dl, dl
-         jz .exit
-         mov byte [r8 + rax], dl
-         mov byte [r8 + rax + 1], r9b             ; Character color
-         inc rbx
-         add rax, 2                               ; Increase the position of a character (2 bytes)
-         jmp .nextc
-  .exit:
-         xor r8, r8
+	mov r8, UPPER_TEXT_VIDEO						; The starting linear address of video memory
+	.nextc:
+		mov dl, [rbx]								; Get the character to be displayed
+		or dl, dl
+		jz .exit
+		mov byte [r8 + rax], dl
+		mov byte [r8 + rax + 1], r9b				; Character color
+		inc rbx
+		add rax, 2									; Increase the position of a character (2 bytes)
+		jmp .nextc
+	.exit:
+		xor r8, r8
 
-         mov qword [rel _prnxy_locker], 0         ; Release lock
-         popfq                                    ; A
+		mov qword [rel _prnxy_locker], 0			; Release lock
+		popfq										; A
 
-         pop r8
-         pop rdx
-         pop rcx
-         pop rbx
-         pop rax
+		pop r8
+		pop rdx
+		pop rcx
+		pop rbx
+		pop rax
 
-         ret
-
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-make_call_gate:                                   ; Create a 64-bit call gate
-                                                  ; In: RAX=Linear address of the routine
-                                                  ; Out: RDI:RSI=Call gate
-         mov rdi, rax
-         shr rdi, 32                              ; Get the high 64 bits of the gate, in RDI
-
-         push rax                                 ; Construct the data structure and preset bits 15~0 of the linear address
-         mov word [rsp + 2], CORE_CODE64_SEL      ; Preset segment selector part
-         mov [rsp + 4], eax                       ; Preset bits 31~16 of the linear address
-         mov word [rsp + 4], 0x8c00               ; Add P=1, TYPE=64-bit call gate
-         pop rsi
-
-         ret
+		ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-make_interrupt_gate:                              ; Create a 64-bit interrupt gate
-                                                  ; In: RAX=Linear address of the routine
-                                                  ; Out: RDI:RSI=Interrupt gate
-         mov rdi, rax
-         shr rdi, 32                              ; Get the high 64 bits of the gate, in RDI
+make_call_gate:										; Create a 64-bit call gate
+													; In: RAX=Linear address of the routine
+													; Out: RDI:RSI=Call gate
+	mov rdi, rax
+	shr rdi, 32										; Get the high 64 bits of the gate, in RDI
 
-         push rax                                 ; Construct the data structure and preset bits 15~0 of the linear address
-         mov word [rsp + 2], CORE_CODE64_SEL      ; Preset segment selector part
-         mov [rsp + 4], eax                       ; Preset bits 31~16 of the linear address
-         mov word [rsp + 4], 0x8e00               ; Add P=1, TYPE=64-bit interrupt gate
-         pop rsi
+	push rax										; Construct the data structure and preset bits 15~0 of the linear address
+	mov word [rsp + 2], CORE_CODE64_SEL				; Preset segment selector part
+	mov [rsp + 4], eax								; Preset bits 31~16 of the linear address
+	mov word [rsp + 4], 0x8c00						; Add P=1, TYPE=64-bit call gate
+	pop rsi
 
-         ret
-
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-make_trap_gate:                                   ; Create a 64-bit trap gate
-                                                  ; In: RAX=Linear address of the routine
-                                                  ; Out: RDI:RSI=Trap gate
-         mov rdi, rax
-         shr rdi, 32                              ; Get the high 64 bits of the gate, in RDI
-
-         push rax                                 ; Construct the data structure and preset bits 15~0 of the linear address
-         mov word [rsp + 2], CORE_CODE64_SEL      ; Preset segment selector part
-         mov [rsp + 4], eax                       ; Preset bits 31~16 of the linear address
-         mov word [rsp + 4], 0x8f00               ; Add P=1, TYPE=64-bit trap gate
-         pop rsi
-
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-make_tss_descriptor:                              ; Create a 64-bit TSS descriptor
-                                                  ; In: RAX=Linear address of TSS
-                                                  ; Out: RDI:RSI=TSS descriptor
-         push rax
+make_interrupt_gate:								; Create a 64-bit interrupt gate
+													; In: RAX=Linear address of the routine
+													; Out: RDI:RSI=Interrupt gate
+	mov rdi, rax
+	shr rdi, 32										; Get the high 64 bits of the gate, in RDI
 
-         mov rdi, rax
-         shr rdi, 32                              ; Get the high 64 bits of the gate, in RDI
+	push rax										; Construct the data structure and preset bits 15~0 of the linear address
+	mov word [rsp + 2], CORE_CODE64_SEL				; Preset segment selector part
+	mov [rsp + 4], eax								; Preset bits 31~16 of the linear address
+	mov word [rsp + 4], 0x8e00						; Add P=1, TYPE=64-bit interrupt gate
+	pop rsi
 
-         push rax                                 ; Move part of the linear address to the appropriate position first
-         shl qword [rsp], 16                      ; Move bits 23~00 of the linear address to the correct position
-         mov word [rsp], 104                      ; Standard length of segment limit
-         mov al, [rsp + 5]
-         mov [rsp + 7], al                        ; Move bits 31~24 of the linear address to the correct position
-         mov byte [rsp + 5], 0x89                 ; P=1, DPL=00, TYPE=1001 (64-bit TSS)
-         mov byte [rsp + 6], 0                    ; G, 0, 0, AVL and limit 19~16
-         pop rsi                                  ; The low 64 bits of the gate
-
-         pop rax
-
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-mount_idt_entry:                                  ; Install gate descriptor in interrupt descriptor table IDT
-                                                  ; In: R8=Interrupt vector
-                                                  ;     RDI:RSI=Gate descriptor
-         push r8
-         push r9
+make_trap_gate:										; Create a 64-bit trap gate
+													; In: RAX=Linear address of the routine
+													; Out: RDI:RSI=Trap gate
+	mov rdi, rax
+	shr rdi, 32										; Get the high 64 bits of the gate, in RDI
 
-         shl r8, 4                                ; Multiply the interrupt number by 16 to get the table offset
-         mov r9, UPPER_IDT_LINEAR                 ; The high linear address of the interrupt descriptor table
-         mov [r9 + r8], rsi
-         mov [r9 + r8 + 8], rdi
+	push rax										; Construct the data structure and preset bits 15~0 of the linear address
+	mov word [rsp + 2], CORE_CODE64_SEL				; Preset segment selector part
+	mov [rsp + 4], eax								; Preset bits 31~16 of the linear address
+	mov word [rsp + 4], 0x8f00						; Add P=1, TYPE=64-bit trap gate
+	pop rsi
 
-         pop r9
-         pop r8
-
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-init_8259:                                        ; Initialize 8259 interrupt controller, including resetting vector number
-         push rax
+make_tss_descriptor:								; Create a 64-bit TSS descriptor
+													; In: RAX=Linear address of TSS
+													; Out: RDI:RSI=TSS descriptor
+	push rax
 
-         mov al, 0x11
-         out 0x20, al                             ;ICW1: Edge trigger/cascade mode
-         mov al, 0x20
-         out 0x21, al                             ;ICW2: Starting interrupt vector (bypassing the first 31 exception vectors)
-         mov al, 0x04
-         out 0x21, al                             ;ICW3: Cascade to IR2 of the slave
-         mov al, 0x01
-         out 0x21, al                             ;ICW4: Non-bus buffer, full nesting, normal EOI
+	mov rdi, rax
+	shr rdi, 32										; Get the high 64 bits of the gate, in RDI
 
-         mov al, 0x11
-         out 0xa0, al                             ;ICW1: Edge trigger/cascade mode
-         mov al, 0x28
-         out 0xa1, al                             ;ICW2: Starting interrupt vector-->0x28
-         mov al, 0x02
-         out 0xa1, al                             ;ICW3: Slave identification flag, cascade to main IR2
-         mov al, 0x01
-         out 0xa1, al                             ;ICW4: Non-bus buffer, full nesting, normal EOI
+	push rax										; Move part of the linear address to the appropriate position first
+	shl qword [rsp], 16								; Move bits 23~00 of the linear address to the correct position
+	mov word [rsp], 104								; Standard length of segment limit
+	mov al, [rsp + 5]
+	mov [rsp + 7], al								; Move bits 31~24 of the linear address to the correct position
+	mov byte [rsp + 5], 0x89						; P=1, DPL=00, TYPE=1001 (64-bit TSS)
+	mov byte [rsp + 6], 0							; G, 0, 0, AVL and limit 19~16
+	pop rsi											; The low 64 bits of the gate
 
-         pop rax
-         ret
+	pop rax
+
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-_read_hdd_locker dq 0                              ; Read hard disk lock
+mount_idt_entry:									; Install gate descriptor in interrupt descriptor table IDT
+													; In: R8=Interrupt vector
+													;     RDI:RSI=Gate descriptor
+	push r8
+	push r9
 
-read_hard_disk_0:                                 ; Read a logical sector from the hard disk
-                                                  ; In: RAX=Logical sector number
-                                                  ;     RBX=Target buffer linear address
-                                                  ; Out: RBX=RBX+512
-         push rax
-         push rcx
-         push rdx
+	shl r8, 4										; Multiply the interrupt number by 16 to get the table offset
+	mov r9, UPPER_IDT_LINEAR						; The high linear address of the interrupt descriptor table
+	mov [r9 + r8], rsi
+	mov [r9 + r8 + 8], rdi
 
-         pushfq                                   ; -->A
-         cli
-         SET_SPIN_LOCK rdx, qword [rel _read_hdd_locker]
+	pop r9
+	pop r8
 
-         push rax
-
-         mov dx, 0x1f2
-         mov al, 1
-         out dx, al                               ; Number of sectors read
-
-         inc dx                                   ; 0x1f3
-         pop rax
-         out dx, al                               ; LBA address 7~0
-
-         inc dx                                   ; 0x1f4
-         mov cl, 8
-         shr rax, cl
-         out dx, al                               ; LBA address 15~8
-
-         inc dx                                   ; 0x1f5
-         shr rax, cl
-         out dx, al                               ; LBA address 23~16
-
-         inc dx                                   ; 0x1f6
-         shr rax, cl
-         or al, 0xe0                              ; First hard disk LBA address 27~24
-         out dx, al
-
-         inc dx                                   ; 0x1f7
-         mov al, 0x20                             ; Read command
-         out dx, al
-
-  .waits:
-         in al, dx
-         ;and al, 0x88
-         ;cmp al, 0x08
-         test al, 8
-         jz .waits                               ; Not busy, and the hard disk is ready for data transfer
-
-         mov rcx, 256                             ; Total number of words to read
-         mov dx, 0x1f0
-  .readw:
-         in ax, dx
-         mov [rbx], ax
-         add rbx, 2
-         loop .readw
-
-         mov qword [rel _read_hdd_locker], 0      ; Release lock
-         popfq                                    ; A
-
-         pop rdx
-         pop rcx
-         pop rax
-
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  _page_bit_map times 2*1024/4/8 db 0xff          ; Corresponding to the first 512 pages (2MB) of physical memory
-          times (PHY_MEMORY_SIZE-2)*1024/4/8 db 0 ; Corresponding to subsequent pages
-  _page_map_len  equ $ - _page_bit_map
+init_8259:											; Initialize 8259 interrupt controller, including resetting vector number
+	push rax
 
-allocate_a_4k_page:                               ; Allocate a 4KB page
-                                                  ; In: None
-                                                  ; Out: RAX=Physical address of the page
-         xor rax, rax
-  .b1:
-         lock bts [rel _page_bit_map], rax
-         jnc .b2
-         inc rax
-         cmp rax, _page_map_len * 8               ; Immediate number sign extension to 64 bits for comparison
-         jl .b1
+	mov al, 0x11
+	out 0x20, al									;ICW1: Edge trigger/cascade mode
+	mov al, 0x20
+	out 0x21, al									;ICW2: Starting interrupt vector (bypassing the first 31 exception vectors)
+	mov al, 0x04
+	out 0x21, al									;ICW3: Cascade to IR2 of the slave
+	mov al, 0x01
+	out 0x21, al									;ICW4: Non-bus buffer, full nesting, normal EOI
 
-         ;For this simple system, there is usually no shortage of pages to allocate. For a popular system, if there are not enough pages to allocate, virtual memory management needs to be performed here, that is, recycle the logged out pages, or perform page swapping in and out.
-  .b2:
-         shl rax, 12                              ; Multiply by 4096 (0x1000)
+	mov al, 0x11
+	out 0xa0, al									;ICW1: Edge trigger/cascade mode
+	mov al, 0x28
+	out 0xa1, al									;ICW2: Starting interrupt vector-->0x28
+	mov al, 0x02
+	out 0xa1, al									;ICW3: Slave identification flag, cascade to main IR2
+	mov al, 0x01
+	out 0xa1, al									;ICW4: Non-bus buffer, full nesting, normal EOI
 
-         ret
-
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-lin_to_lin_of_pml4e:                              ; Return the linear address of the 4-level header table item corresponding to the specified linear address
-                                                  ; In: R13=Linear address
-                                                  ; Out: R14=Linear address of the corresponding 4-level header table item
-         push r13
-
-         mov r14, 0x0000_ff80_0000_0000           ; Retain the 4-level header index part
-         and r13, r14
-         shr r13, 36                              ; Original 4-level header index becomes page offset
-
-         mov r14, 0xffff_ffff_ffff_f000           ; Address prefix for accessing 4-level header table
-         add r14, r13
-
-         pop r13
-
-         ret
+	pop rax
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-lin_to_lin_of_pdpte:                              ; Return the linear address of the page directory pointer item corresponding to the specified linear address
-                                                  ; In: R13=Linear address
-                                                  ; Out: R14=Linear address of the corresponding page directory pointer item
-         push r13
+_read_hdd_locker dq 0								; Read hard disk lock
 
-         mov r14, 0x0000_ffff_c000_0000           ; Retain the 4-level header index and page directory pointer index parts
-         and r13, r14
-         shr r13, 27                              ; Original 4-level header index becomes page table index, original page directory pointer index becomes page offset
+read_hard_disk_0:									; Read a logical sector from the hard disk
+													; In: RAX=Logical sector number
+													;     RBX=Target buffer linear address
+													; Out: RBX=RBX+512
+	push rax
+	push rcx
+	push rdx
 
-         mov r14, 0xffff_ffff_ffe0_0000           ; Address prefix for accessing page directory pointer table
-         add r14, r13
+	pushfq											; -->A
+	cli
+	SET_SPIN_LOCK rdx, qword [rel _read_hdd_locker]
 
-         pop r13
+	push rax
 
-         ret
+	mov dx, 0x1f2
+	mov al, 1
+	out dx, al										; Number of sectors read
+
+	inc dx											; 0x1f3
+	pop rax
+	out dx, al										; LBA address 7~0
+
+	inc dx											; 0x1f4
+	mov cl, 8
+	shr rax, cl
+	out dx, al										; LBA address 15~8
+
+	inc dx											; 0x1f5
+	shr rax, cl
+	out dx, al										; LBA address 23~16
+
+	inc dx											; 0x1f6
+	shr rax, cl
+	or al, 0xe0										; First hard disk LBA address 27~24
+	out dx, al
+
+	inc dx											; 0x1f7
+	mov al, 0x20									; Read command
+	out dx, al
+
+	.waits:
+		in al, dx
+		;and al, 0x88
+		;cmp al, 0x08
+		test al, 8
+		jz .waits									; Not busy, and the hard disk is ready for data transfer
+
+	mov rcx, 256									; Total number of words to read
+	mov dx, 0x1f0
+	.readw:
+		in ax, dx
+		mov [rbx], ax
+		add rbx, 2
+		loop .readw
+
+	mov qword [rel _read_hdd_locker], 0				; Release lock
+	popfq											; A
+
+	pop rdx
+	pop rcx
+	pop rax
+
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-lin_to_lin_of_pdte:                               ; Return the linear address of the page directory item corresponding to the specified linear address
-                                                  ; In: R13=Linear address
-                                                  ; Out: R14=Linear address of the corresponding page directory item
-         push r13
+	_page_bit_map times 2*1024/4/8 db 0xff			; Corresponding to the first 512 pages (2MB) of physical memory
+	times (PHY_MEMORY_SIZE-2)*1024/4/8 db 0			; Corresponding to subsequent pages
+	_page_map_len  equ $ - _page_bit_map
 
-         mov r14, 0x0000_ffff_ffe0_0000           ; Retain the 4-level header index, page directory pointer index, and page directory index parts
-         and r13, r14
-         shr r13, 18                              ; Original 4-level header index becomes page directory index, original page directory pointer index becomes page table index, original page directory index becomes page offset
+allocate_a_4k_page:									; Allocate a 4KB page
+													; In: None
+													; Out: RAX=Physical address of the page
+	xor rax, rax
+	.b1:
+		lock bts [rel _page_bit_map], rax
+		jnc .b2
+		inc rax
+		cmp rax, _page_map_len * 8					; Immediate number sign extension to 64 bits for comparison
+		jl .b1
 
-         mov r14, 0xffff_ffff_c000_0000           ; Address prefix for accessing page directory table
-         add r14, r13
+	; For this simple system, there is usually no shortage of pages to allocate.
+	; For a popular system, if there are not enough pages to allocate, virtual memory management needs to be performed here,
+	; that is, recycle the logged out pages, or perform page swapping in and out.
+	.b2:
+		shl rax, 12			   ; Multiply by 4096 (0x1000)
 
-         pop r13
-
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-lin_to_lin_of_pte:                                ; Return the linear address of the page table item corresponding to the specified linear address
-                                                  ; In: R13=Linear address
-                                                  ; Out: R14=Linear address of the corresponding page table item
-         push r13
+lin_to_lin_of_pml4e:								; Return the linear address of the 4-level header table item corresponding to the specified linear address
+													; In: R13=Linear address
+													; Out: R14=Linear address of the corresponding 4-level header table item
+	push r13
 
-         mov r14, 0x0000_ffff_ffff_f000           ; Retain the index parts of the 4-level header, page directory pointer, page directory, and page table
-         and r13, r14
-         shr r13, 9                               ; Original 4-level header index becomes page directory pointer index, original page directory pointer index becomes page directory index, original page directory index becomes page table index, original page table index becomes page offset
+	mov r14, 0x0000_ff80_0000_0000					; Retain the 4-level header index part
+	and r13, r14
+	shr r13, 36										; Original 4-level header index becomes page offset
 
-         mov r14, 0xffff_ff80_0000_0000           ; Address prefix for accessing page table
-         add r14, r13
+	mov r14, 0xffff_ffff_ffff_f000					; Address prefix for accessing 4-level header table
+	add r14, r13
 
-         pop r13
+	pop r13
 
-         ret
+	ret
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lin_to_lin_of_pdpte:								; Return the linear address of the page directory pointer item corresponding to the specified linear address
+													; In: R13=Linear address
+													; Out: R14=Linear address of the corresponding page directory pointer item
+	push r13
+
+	mov r14, 0x0000_ffff_c000_0000					; Retain the 4-level header index and page directory pointer index parts
+	and r13, r14
+	shr r13, 27										; Original 4-level header index becomes page table index, original page directory pointer index becomes page offset
+
+	mov r14, 0xffff_ffff_ffe0_0000					; Address prefix for accessing page directory pointer table
+	add r14, r13
+
+	pop r13
+
+	ret
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lin_to_lin_of_pdte:									; Return the linear address of the page directory item corresponding to the specified linear address
+													; In: R13=Linear address
+													; Out: R14=Linear address of the corresponding page directory item
+	push r13
+
+	mov r14, 0x0000_ffff_ffe0_0000					; Retain the 4-level header index, page directory pointer index, and page directory index parts
+	and r13, r14
+	shr r13, 18										; Original 4-level header index becomes page directory index, original page directory pointer index becomes page table index, original page directory index becomes page offset
+
+	mov r14, 0xffff_ffff_c000_0000					; Address prefix for accessing page directory table
+	add r14, r13
+
+	pop r13
+
+	ret
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+lin_to_lin_of_pte:									; Return the linear address of the page table item corresponding to the specified linear address
+													; In: R13=Linear address
+													; Out: R14=Linear address of the corresponding page table item
+	push r13
+
+	mov r14, 0x0000_ffff_ffff_f000					; Retain the index parts of the 4-level header, page directory pointer, page directory, and page table
+	and r13, r14
+	shr r13, 9										; Original 4-level header index becomes page directory pointer index, original page directory pointer index becomes page directory index, original page directory index becomes page table index, original page table index becomes page offset
+
+	mov r14, 0xffff_ff80_0000_0000					; Address prefix for accessing page table
+	add r14, r13
+
+	pop r13
+
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 _spaging_locker dq 0
 
-setup_paging_for_laddr:                           ; Install paging system (entry) for the specified linear address
-                                                  ; In: R13=Linear address
-         push rcx
-         push rax
-         push r14
+setup_paging_for_laddr:								; Install paging system (entry) for the specified linear address
+													; In: R13=Linear address
+	push rcx
+	push rax
+	push r14
 
-         pushfq                                   ; -->A
-         cli
-         SET_SPIN_LOCK r14, qword [rel _spaging_locker]
+	pushfq											; -->A
+	cli
+	SET_SPIN_LOCK r14, qword [rel _spaging_locker]
 
-         ; Create a 4-level paging system in which the 4-level header corresponding to all linear addresses is always present.
-         ; Check if the 4-level header item corresponding to the linear address exists
-         call lin_to_lin_of_pml4e                 ; Get the linear address of the 4-level header item
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b0
+	; Create a 4-level paging system in which the 4-level header corresponding to all linear addresses is always present.
+	; Check if the 4-level header item corresponding to the linear address exists
+	call lin_to_lin_of_pml4e						; Get the linear address of the 4-level header item
+	test qword [r14], 1								; Is the P bit "1"? Is the item present?
+	jnz .b0
 
-         ; Create and install the 4-level header item corresponding to the linear address (create the page directory pointer table)
-         call allocate_a_4k_page                  ; Allocate a page as a page directory pointer table
-         or rax, 0x07                             ; Add attribute bit U/S=R/W=P=1
-         mov [r14], rax                           ; Register the 4-level header item (page directory pointer table address) in the 4-level header table
+	; Create and install the 4-level header item corresponding to the linear address (create the page directory pointer table)
+	call allocate_a_4k_page							; Allocate a page as a page directory pointer table
+	or rax, 0x07									; Add attribute bit U/S=R/W=P=1
+	mov [r14], rax									; Register the 4-level header item (page directory pointer table address) in the 4-level header table
 
-         ; Clear the page directory pointer table
-         call lin_to_lin_of_pdpte
-         shr r14, 12
-         shl r14, 12                              ; Get the linear address of the page directory pointer table
-         mov rcx, 512
-  .cls0:
-         mov qword [r14], 0
-         add r14, 8
-         loop .cls0
+	; Clear the page directory pointer table
+	call lin_to_lin_of_pdpte
+	shr r14, 12
+	shl r14, 12										; Get the linear address of the page directory pointer table
+	mov rcx, 512
+	.cls0:
+		mov qword [r14], 0
+		add r14, 8
+		loop .cls0
 ;-------------------------------------------------
-  .b0:
-         ; Check if the page directory pointer item corresponding to the linear address exists
-         call lin_to_lin_of_pdpte                 ; Get the linear address of the page directory pointer item
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b1                                  ; The page directory pointer item exists, turn to .b1
+	.b0:
+		; Check if the page directory pointer item corresponding to the linear address exists
+		call lin_to_lin_of_pdpte					; Get the linear address of the page directory pointer item
+		test qword [r14], 1							; Is the P bit "1"? Is the item present?
+		jnz .b1										; The page directory pointer item exists, turn to .b1
 
-         ; Create and install the page directory pointer item corresponding to the linear address (allocate the page directory table)
-         call allocate_a_4k_page                  ; Allocate a page as a page directory table
-         or rax, 0x07                             ; Add attribute bit
-         mov [r14], rax                           ; Register the page directory pointer item (page directory table address) in the page directory pointer table
+	; Create and install the page directory pointer item corresponding to the linear address (allocate the page directory table)
+	call allocate_a_4k_page							; Allocate a page as a page directory table
+	or rax, 0x07									; Add attribute bit
+	mov [r14], rax									; Register the page directory pointer item (page directory table address) in the page directory pointer table
 
-         ; Clear the page directory table
-         call lin_to_lin_of_pdte
-         shr r14, 12
-         shl r14, 12                             ; Get the linear address of the page directory table
-         mov rcx, 512
-  .cls1:
-         mov qword [r14], 0
-         add r14, 8
-         loop .cls1
+	; Clear the page directory table
+	call lin_to_lin_of_pdte
+	shr r14, 12
+	shl r14, 12										; Get the linear address of the page directory table
+	mov rcx, 512
+	.cls1:
+		mov qword [r14], 0
+		add r14, 8
+		loop .cls1
 ;-------------------------------------------------
-  .b1:
-         ; Check if the page directory item corresponding to the linear address exists
-         call lin_to_lin_of_pdte
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b2                                  ; The page directory item already exists, turn to .b2
+	.b1:
+		; Check if the page directory item corresponding to the linear address exists
+		call lin_to_lin_of_pdte
+		test qword [r14], 1							; Is the P bit "1"? Is the item present?
+		jnz .b2										; The page directory item already exists, turn to .b2
 
-         ; Create and install the page directory item corresponding to the linear address (allocate the page table)
-         call allocate_a_4k_page                  ; Allocate a page as a page table
-         or rax, 0x07                             ; Add attribute bit
-         mov [r14], rax                           ; Register the page directory item (page table address) in the page directory table
+	; Create and install the page directory item corresponding to the linear address (allocate the page table)
+	call allocate_a_4k_page							; Allocate a page as a page table
+	or rax, 0x07									; Add attribute bit
+	mov [r14], rax									; Register the page directory item (page table address) in the page directory table
 
-         ; Clear the page table
-         call lin_to_lin_of_pte
-         shr r14, 12
-         shl r14, 12                             ; Get the linear address of the page table
-         mov rcx, 512
-  .cls2:
-         mov qword [r14], 0
-         add r14, 8
-         loop .cls2
+	; Clear the page table
+	call lin_to_lin_of_pte
+	shr r14, 12
+	shl r14, 12										; Get the linear address of the page table
+	mov rcx, 512
+	.cls2:
+		mov qword [r14], 0
+		add r14, 8
+		loop .cls2
 ;-------------------------------------------------
-  .b2:
-         ; Check if the page table item corresponding to the linear address exists
-         call lin_to_lin_of_pte
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b3                                  ; The page table item already exists, turn to .b3
+	.b2:
+		; Check if the page table item corresponding to the linear address exists
+		call lin_to_lin_of_pte
+		test qword [r14], 1							; Is the P bit "1"? Is the item present?
+		jnz .b3										; The page table item already exists, turn to .b3
 
-         ; Create and install the page table item corresponding to the linear address (allocate the final page)
-         call allocate_a_4k_page                  ; Allocate a page
-         or rax, 0x07                             ; Add attribute bit
-         mov [r14], rax                           ; Register the page table item (page address) in the page table
+	; Create and install the page table item corresponding to the linear address (allocate the final page)
+	call allocate_a_4k_page							; Allocate a page
+	or rax, 0x07									; Add attribute bit
+	mov [r14], rax									; Register the page table item (page address) in the page table
 
-  .b3:
-         mov qword [rel _spaging_locker], 0
-         popfq                                    ; A
+	.b3:
+		mov qword [rel _spaging_locker], 0
+		popfq										; A
 
-         pop r14
-         pop rax
-         pop rcx
+	pop r14
+	pop rax
+	pop rcx
 
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 _mapping_locker dq 0
 
-mapping_laddr_to_page:                            ; Install the mapping of linear address to physical page, that is, install the specified physical page for the specified linear address
-                                                  ; In: R13=Linear address
-                                                  ;     RAX=Physical address of the page (with attributes)
-         push rcx
-         push r14
+mapping_laddr_to_page:								; Install the mapping of linear address to physical page, that is, install the specified physical page for the specified linear address
+													; In: R13=Linear address
+													;     RAX=Physical address of the page (with attributes)
+	push rcx
+	push r14
 
-         pushfq
-         cli
-         SET_SPIN_LOCK r14, qword [rel _mapping_locker]
+	pushfq
+	cli
+	SET_SPIN_LOCK r14, qword [rel _mapping_locker]
 
-         push rax
+	push rax
 
-         ; Create a 4-level paging system in which the 4-level header corresponding to all linear addresses is always present.
-         ; Check if the 4-level header item corresponding to the linear address exists
-         call lin_to_lin_of_pml4e                 ; Get the linear address of the 4-level header item
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b0
+	; Create a 4-level paging system in which the 4-level header corresponding to all linear addresses is always present.
+	; Check if the 4-level header item corresponding to the linear address exists
+	call lin_to_lin_of_pml4e						; Get the linear address of the 4-level header item
+	test qword [r14], 1								; Is the P bit "1"? Is the item present?
+	jnz .b0
 
-         ; Create and install the 4-level header item corresponding to the linear address (allocate the page directory pointer table)
-         call allocate_a_4k_page                  ; Allocate a page as a page directory pointer table
-         or rax, 0x07                             ; Add attribute bit U/S=R/W=P=1
-         mov [r14], rax                           ; Register the 4-level header item (page directory pointer table address) in the 4-level header table
+	; Create and install the 4-level header item corresponding to the linear address (allocate the page directory pointer table)
+	call allocate_a_4k_page							; Allocate a page as a page directory pointer table
+	or rax, 0x07									; Add attribute bit U/S=R/W=P=1
+	mov [r14], rax									; Register the 4-level header item (page directory pointer table address) in the 4-level header table
 
-         ; Clear the page directory pointer table
-         call lin_to_lin_of_pdpte
-         shr r14, 12
-         shl r14, 12                              ; Get the linear address of the page directory pointer table
-         mov rcx, 512
-  .cls0:
-         mov qword [r14], 0
-         add r14, 8
-         loop .cls0
+	; Clear the page directory pointer table
+	call lin_to_lin_of_pdpte
+	shr r14, 12
+	shl r14, 12										; Get the linear address of the page directory pointer table
+	mov rcx, 512
+	.cls0:
+		mov qword [r14], 0
+		add r14, 8
+		loop .cls0
 ;-------------------------------------------------
-  .b0:
-         ; Check if the page directory pointer item corresponding to the linear address exists
-         call lin_to_lin_of_pdpte                 ; Get the linear address of the page directory pointer item
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b1                                  ; The page directory pointer item exists, turn to .b1
+	.b0:
+		; Check if the page directory pointer item corresponding to the linear address exists
+		call lin_to_lin_of_pdpte					; Get the linear address of the page directory pointer item
+		test qword [r14], 1							; Is the P bit "1"? Is the item present?
+		jnz .b1										; The page directory pointer item exists, turn to .b1
 
-         ; Create and install the page directory pointer item corresponding to the linear address (allocate the page directory table)
-         call allocate_a_4k_page                  ; Allocate a page as a page directory table
-         or rax, 0x07                             ; Add attribute bit
-         mov [r14], rax                           ; Register the page directory pointer item (page directory table address) in the page directory pointer table
+	; Create and install the page directory pointer item corresponding to the linear address (allocate the page directory table)
+	call allocate_a_4k_page							; Allocate a page as a page directory table
+	or rax, 0x07									; Add attribute bit
+	mov [r14], rax									; Register the page directory pointer item (page directory table address) in the page directory pointer table
 
-         ; Clear the page directory table
-         call lin_to_lin_of_pdte
-         shr r14, 12
-         shl r14, 12                             ; Get the linear address of the page directory table
-         mov rcx, 512
-  .cls1:
-         mov qword [r14], 0
-         add r14, 8
-         loop .cls1
+	; Clear the page directory table
+	call lin_to_lin_of_pdte
+	shr r14, 12
+	shl r14, 12										; Get the linear address of the page directory table
+	mov rcx, 512
+	.cls1:
+		mov qword [r14], 0
+		add r14, 8
+		loop .cls1
 ;-------------------------------------------------
-  .b1:
-         ; Check if the page directory item corresponding to the linear address exists
-         call lin_to_lin_of_pdte
-         test qword [r14], 1                      ; Is the P bit "1"? Is the item present?
-         jnz .b2                                  ; The page directory item already exists, turn to .b2
+	.b1:
+		; Check if the page directory item corresponding to the linear address exists
+		call lin_to_lin_of_pdte
+		test qword [r14], 1							; Is the P bit "1"? Is the item present?
+		jnz .b2										; The page directory item already exists, turn to .b2
 
-         ; Create and install the page directory item corresponding to the linear address (allocate the page table)
-         call allocate_a_4k_page                  ; Allocate a page as a page table
-         or rax, 0x07                             ; Add attribute bit
-         mov [r14], rax                           ; Register the page directory item (page table address) in the page directory table
+	; Create and install the page directory item corresponding to the linear address (allocate the page table)
+	call allocate_a_4k_page							; Allocate a page as a page table
+	or rax, 0x07									; Add attribute bit
+	mov [r14], rax									; Register the page directory item (page table address) in the page directory table
 
-         ; Clear the page table
-         call lin_to_lin_of_pte
-         shr r14, 12
-         shl r14, 12                              ; Get the linear address of the page table
-         mov rcx, 512
-  .cls2:
-         mov qword [r14], 0
-         add r14, 8
-         loop .cls2
+	; Clear the page table
+	call lin_to_lin_of_pte
+	shr r14, 12
+	shl r14, 12										; Get the linear address of the page table
+	mov rcx, 512
+	.cls2:
+		mov qword [r14], 0
+		add r14, 8
+		loop .cls2
 ;-------------------------------------------------
-  .b2:
-         call lin_to_lin_of_pte                   ; Get the linear address of the page table item
-         pop rax
-         mov [r14], rax                           ; Register the page table item (page address) in the page table
+	.b2:
+		call lin_to_lin_of_pte						; Get the linear address of the page table item
+		pop rax
+		mov [r14], rax								; Register the page table item (page address) in the page table
 
-         mov qword [rel _mapping_locker], 0
-         popfq
+	mov qword [rel _mapping_locker], 0
+	popfq
 
-         pop r14
-         pop rcx
+	pop r14
+	pop rcx
 
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  _core_next_linear  dq CORE_ALLOC_START          ; Next time the available starting linear address for allocation
-  _core_alloc_locker dq 0
+_core_next_linear  dq CORE_ALLOC_START			; Next time the available starting linear address for allocation
+_core_alloc_locker dq 0
 
-core_memory_allocate:                             ; Allocate memory in the high end (kernel) of the virtual address space
-                                                  ; In: RCX=Number of bytes requested
-                                                  ; Out: R13=Starting linear address of this allocation
-                                                  ;      R14=Starting linear address of next allocation
-         pushfq                                   ; A-->
-         cli
-         SET_SPIN_LOCK r14, qword [rel _core_alloc_locker]
+core_memory_allocate:								; Allocate memory in the high end (kernel) of the virtual address space
+													; In: RCX=Number of bytes requested
+													; Out: R13=Starting linear address of this allocation
+													;      R14=Starting linear address of next allocation
+	pushfq											; A-->
+	cli
+	SET_SPIN_LOCK r14, qword [rel _core_alloc_locker]
 
-         mov r13, [rel _core_next_linear]         ; Get the starting linear address of this allocation
-         lea r14, [r13 + rcx]                     ; Next time the starting linear address of the allocation
+	mov r13, [rel _core_next_linear]				; Get the starting linear address of this allocation
+	lea r14, [r13 + rcx]							; Next time the starting linear address of the allocation
 
-         test r14, 0x07                           ; Are the lowest 3 bits 000 (aligned to 8 bytes)?
-         jz .algn
-         add r14, 0x08                            ; Immediate number sign extension to 64 bits for operation
-         shr r14, 3
-         shl r14, 3                               ; The lowest 3 bits become 0, forcing alignment to 8 bytes.
+	test r14, 0x07									; Are the lowest 3 bits 000 (aligned to 8 bytes)?
+	jz .algn
+	add r14, 0x08									; Immediate number sign extension to 64 bits for operation
+	shr r14, 3
+	shl r14, 3										; The lowest 3 bits become 0, forcing alignment to 8 bytes.
 
-  .algn:
-         mov [rel _core_next_linear], r14         ; Write back.
+	.algn:
+		mov [rel _core_next_linear], r14			; Write back.
 
-         mov qword [rel _core_alloc_locker], 0    ; Release lock
-         popfq                                    ; A
+	mov qword [rel _core_alloc_locker], 0			; Release lock
+	popfq											; A
 
-         push r13
-         push r14
+	push r13
+	push r14
 
-         ; The following is the memory allocation page requested. R13 is the linear address of this allocation; R14 is the linear address of the next allocation.
-         shr r13, 12
-         shl r13, 12                              ; Clear the page offset part
-         shr r14, 12
-         shl r14, 12                              ; too
-  .next:
-         call setup_paging_for_laddr              ; Install the page where the current linear address is located
-         add r13, 0x1000                          ; +4096
-         cmp r13, r14
-         jle .next
+	; The following is the memory allocation page requested. R13 is the linear address of this allocation; R14 is the linear address of the next allocation.
+	shr r13, 12
+	shl r13, 12										; Clear the page offset part
+	shr r14, 12
+	shl r14, 12										; too
+	.next:
+		call setup_paging_for_laddr					; Install the page where the current linear address is located
+		add r13, 0x1000								; +4096
+		cmp r13, r14
+		jle .next
 
-         pop r14
-         pop r13
+	pop r14
+	pop r13
 
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-user_memory_allocate:                             ; Allocate memory in the private space (low end) of the user task
-                                                  ; In: R11=Linear address of task control block PCB
-                                                  ;     RCX=Number of bytes requested
-                                                  ; Out: R13=Starting linear address of this allocation
-                                                  ;      R14=Starting linear address of next allocation
-         ; Get the starting linear address of this memory allocation
-         mov r13, [r11 + 24]                      ; Get the starting linear address of this allocation
-         lea r14, [r13 + rcx]                     ; Next time the starting linear address of the allocation
+user_memory_allocate:								; Allocate memory in the private space (low end) of the user task
+													; In: R11=Linear address of task control block PCB
+													;     RCX=Number of bytes requested
+													; Out: R13=Starting linear address of this allocation
+													;      R14=Starting linear address of next allocation
+	; Get the starting linear address of this memory allocation
+	mov r13, [r11 + 24]								; Get the starting linear address of this allocation
+	lea r14, [r13 + rcx]							; Next time the starting linear address of the allocation
 
-         test r14, 0x07                           ; Is it divisible by 8 (aligned to 8 bytes)?
-         jz .algn
-         shr r14, 3
-         shl r14, 3                               ; The lowest 3 bits become 0, forcing alignment to 8 bytes.
-         add r14, 0x08                            ; Immediate number sign extension to 64 bits for operation
+	test r14, 0x07									; Is it divisible by 8 (aligned to 8 bytes)?
+	jz .algn
+	shr r14, 3
+	shl r14, 3										; The lowest 3 bits become 0, forcing alignment to 8 bytes.
+	add r14, 0x08									; Immediate number sign extension to 64 bits for operation
 
-  .algn:
-         mov [r11 + 24], r14                      ; Write back to PCB
+	.algn:
+		mov [r11 + 24], r14							; Write back to PCB
 
-         push r13
-         push r14
+	push r13
+	push r14
 
-         ; The following is the memory allocation page requested. R13 is the linear address of this allocation; R14 is the linear address of the next allocation.
-         shr r13, 12
-         shl r13, 12                              ; Clear the page offset part
-         shr r14, 12
-         shl r14, 12                              ; too
-  .next:
-         call setup_paging_for_laddr              ; Install the page where the current linear address is located
-         add r13, 0x1000                          ; +4096
-         cmp r13, r14
-         jle .next
+	; The following is the memory allocation page requested. R13 is the linear address of this allocation; R14 is the linear address of the next allocation.
+	shr r13, 12
+	shl r13, 12										; Clear the page offset part
+	shr r14, 12
+	shl r14, 12										; too
+	.next:
+		call setup_paging_for_laddr					; Install the page where the current linear address is located
+		add r13, 0x1000								; +4096
+		cmp r13, r14
+		jle .next
 
-         pop r14
-         pop r13
+	pop r14
+	pop r13
 
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 _copy_locker dq 0
 
-copy_current_pml4:                                ; Create a new 4-level header table and copy the contents of the current 4-level header table
-                                                  ; In: None
-                                                  ; Out: RAX=Physical address and attributes of the new 4-level header table
-         push rsi
-         push rdi
-         push r13
-         push rcx
+copy_current_pml4:									; Create a new 4-level header table and copy the contents of the current 4-level header table
+													; In: None
+													; Out: RAX=Physical address and attributes of the new 4-level header table
+	push rsi
+	push rdi
+	push r13
+	push rcx
 
-         pushfq                                   ; -->A
-         cli
-         SET_SPIN_LOCK rcx, qword [rel _copy_locker]
+	pushfq											; -->A
+	cli
+	SET_SPIN_LOCK rcx, qword [rel _copy_locker]
 
-         call allocate_a_4k_page                  ; Allocate a physical page
-         or rax, 0x07                             ; Immediate number sign extension to 64 bits for operation
-         mov r13, NEW_PML4_LINEAR                 ; Use the specified linear address to map and access this page
-         call mapping_laddr_to_page
+	call allocate_a_4k_page							; Allocate a physical page
+	or rax, 0x07									; Immediate number sign extension to 64 bits for operation
+	mov r13, NEW_PML4_LINEAR						; Use the specified linear address to map and access this page
+	call mapping_laddr_to_page
 
-         ; The relevant items are left before the modification, and this modification must be refreshed.
-         invlpg [r13]
+	; The relevant items are left before the modification, and this modification must be refreshed.
+	invlpg [r13]
 
-         mov rsi, 0xffff_ffff_ffff_f000           ; RSI->Linear address of the current active 4-level header table
-         mov rdi, r13                             ; RDI->Linear address of the new 4-level header table 
-         mov rcx, 512                             ; RCX=Number of directory items to copy 
-         cld
-         repe movsq
+	mov rsi, 0xffff_ffff_ffff_f000					; RSI->Linear address of the current active 4-level header table
+	mov rdi, r13									; RDI->Linear address of the new 4-level header table 
+	mov rcx, 512									; RCX=Number of directory items to copy 
+	cld
+	repe movsq
 
-         mov [r13 + 0xff8], rax                   ; The 511th item of the new 4-level header table points to itself
-         invlpg [r13 + 0xff8]
+	mov [r13 + 0xff8], rax							; The 511th item of the new 4-level header table points to itself
+	invlpg [r13 + 0xff8]
 
-         mov qword [rel _copy_locker], 0
-         popfq                                    ; A
+	mov qword [rel _copy_locker], 0
+	popfq											; A
 
-         pop rcx
-         pop r13
-         pop rdi
-         pop rsi
+	pop rcx
+	pop r13
+	pop rdi
+	pop rsi
 
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 _cmos_locker dq 0
 
-get_cmos_time:                                    ; Get the current time from CMOS
-                                                  ; In: RBX=Buffer linear address
-         push rax
+get_cmos_time:										; Get the current time from CMOS
+													; In: RBX=Buffer linear address
+	push rax
 
-         pushfq                                   ; -->A
-         cli
-         SET_SPIN_LOCK rax, qword [rel _cmos_locker]
+	pushfq											; -->A
+	cli
+	SET_SPIN_LOCK rax, qword [rel _cmos_locker]
 
-  .w0:
-         mov al, 0x8a
-         out 0x70, al
-         in al, 0x71                              ; Read register A
-         test al, 0x80                            ; Test the 7th bit UIP, wait for the end of the update cycle.
-         jnz .w0
+	.w0:
+		mov al, 0x8a
+		out 0x70, al
+		in al, 0x71									; Read register A
+		test al, 0x80								; Test the 7th bit UIP, wait for the end of the update cycle.
+		jnz .w0
 
-         mov al, 0x84
-         out 0x70, al
-         in al, 0x71                              ; Read RTC current time (hour)
-         mov ah, al
+	mov al, 0x84
+	out 0x70, al
+	in al, 0x71										; Read RTC current time (hour)
+	mov ah, al
 
-         shr ah, 4
-         and ah, 0x0f
-         add ah, 0x30
-         mov [rbx], ah
+	shr ah, 4
+	and ah, 0x0f
+	add ah, 0x30
+	mov [rbx], ah
 
-         and al, 0x0f
-         add al, 0x30
-         mov [rbx + 1], al
+	and al, 0x0f
+	add al, 0x30
+	mov [rbx + 1], al
 
-         mov byte [rbx + 2], ':'
+	mov byte [rbx + 2], ':'
 
-         mov al, 0x82
-         out 0x70, al
-         in al, 0x71                              ; Read RTC current time (minute)
-         mov ah, al
+	mov al, 0x82
+	out 0x70, al
+	in al, 0x71										; Read RTC current time (minute)
+	mov ah, al
 
-         shr ah, 4
-         and ah, 0x0f
-         add ah, 0x30
-         mov [rbx + 3], ah
+	shr ah, 4
+	and ah, 0x0f
+	add ah, 0x30
+	mov [rbx + 3], ah
 
-         and al, 0x0f
-         add al, 0x30
-         mov [rbx + 4], al
+	and al, 0x0f
+	add al, 0x30
+	mov [rbx + 4], al
 
-         mov byte [rbx + 5], ':'
+	mov byte [rbx + 5], ':'
 
-         mov al, 0x80
-         out 0x70, al
-         in al, 0x71                              ; Read RTC current time (second)
-         mov ah, al                               ; Split into two numbers
+	mov al, 0x80
+	out 0x70, al
+	in al, 0x71										; Read RTC current time (second)
+	mov ah, al										; Split into two numbers
 
-         shr ah, 4                                ; Logical right shift 4 bits
-         and ah, 0x0f
-         add ah, 0x30
-         mov [rbx + 6], ah
+	shr ah, 4										; Logical right shift 4 bits
+	and ah, 0x0f
+	add ah, 0x30
+	mov [rbx + 6], ah
 
-         and al, 0x0f                             ; Only keep the low 4 bits
-         add al, 0x30                             ; Convert to ASCII
-         mov [rbx + 7], al
+	and al, 0x0f									; Only keep the low 4 bits
+	add al, 0x30									; Convert to ASCII
+	mov [rbx + 7], al
 
-         mov byte [rbx + 8], 0                    ; Empty character termination
+	mov byte [rbx + 8], 0							; Empty character termination
 
-         mov qword [rel _cmos_locker], 0
-         popfq                                    ; A
+	mov qword [rel _cmos_locker], 0
+	popfq											; A
 
-         pop rax
+	pop rax
 
-         ret
-
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  _process_id        dq 0
-generate_process_id:                              ; Generate a unique process identifier
-                                                  ; RAX=Process identifier
-         mov rax, 1
-         lock xadd qword [rel _process_id], rax
-
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  _thread_id dq 0
+_process_id        dq 0
+generate_process_id:								; Generate a unique process identifier
+													; RAX=Process identifier
+	mov rax, 1
+	lock xadd qword [rel _process_id], rax
 
-generate_thread_id:                               ; Generate a unique thread identifier
-                                                  ; RAX=Thread identifier
-         mov rax, 1
-         lock xadd qword [rel _thread_id], rax
+	ret
 
-         ret
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+_thread_id dq 0
+
+generate_thread_id:									; Generate a unique thread identifier
+													; RAX=Thread identifier
+	mov rax, 1
+	lock xadd qword [rel _thread_id], rax
+
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   _screen_row        db 8
-get_screen_row:                                   ; Return the row number of the next screen coordinate row
-                                                  ; DH=Row number
-         mov dh, 1
-         lock xadd byte [rel _screen_row], dh
+get_screen_row:										; Return the row number of the next screen coordinate row
+													; DH=Row number
+	mov dh, 1
+	lock xadd byte [rel _screen_row], dh
 
-         ret
-
-;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-get_cpu_number:                                   ; Return the number of the current processor
-                                                  ; RAX=Processor number
-         pushfq
-         cli
-         swapgs
-         mov rax, [gs:16]                         ; Get the CPU number back from the processor's exclusive data area
-         swapgs
-         popfq
-         ret
+	ret
 
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-memory_allocate:                                  ; User space memory allocation
-                                                  ; In: RDX=Number of bytes expected to be allocated
-                                                  ; Out: R13=Starting linear address of the allocated memory
-         push rcx
-         push r11
-         push r14
+get_cpu_number:										; Return the number of the current processor
+													; RAX=Processor number
+	pushfq
+	cli
+	swapgs
+	mov rax, [gs:16]								; Get the CPU number back from the processor's exclusive data area
+	swapgs
+	popfq
+	ret
 
-         pushfq
-         cli
-         swapgs
-         mov r11, [gs:8]                          ; Get the linear address of the PCB of the current task
-         swapgs
-         popfq
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+memory_allocate:									; User space memory allocation
+													; In: RDX=Number of bytes expected to be allocated
+													; Out: R13=Starting linear address of the allocated memory
+	push rcx
+	push r11
+	push r14
 
-         mov rcx, rdx
-         call user_memory_allocate
+	pushfq
+	cli
+	swapgs
+	mov r11, [gs:8]									; Get the linear address of the PCB of the current task
+	swapgs
+	popfq
 
-         pop r14
-         pop r11
-         pop rcx
+	mov rcx, rdx
+	call user_memory_allocate
 
-         ret
+	pop r14
+	pop r11
+	pop rcx
+
+	ret
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

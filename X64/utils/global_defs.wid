@@ -28,8 +28,8 @@
 	UPPER_IDT_LINEAR	equ	UPPER_LINEAR_START + IDT_PHY_ADDR		; High linear address of the IDT
 
 	; Definitions of selectors related to the Global Descriptor Table and constants related to memory management
-	CORE_CODE64_SEL		equ	0x0018						;=00） Selector of the kernel code segment 
-	CORE_STACK64_SEL	equ	0x0020						;=00） Selector of the kernel stack segment
+	CORE_CODE64_SEL		equ	0x0018						; Selector of the kernel code segment 
+	CORE_STACK64_SEL	equ	0x0020						; Selector of the kernel stack segment
 	RESVD_DESC_SEL		equ	0x002b						; Reserved descriptor selector
 	USER_CODE64_SEL		equ	0x003b						; Selector of the code segment of privilege level 3
 	USER_STACK64_SEL	equ	0x0033						; Selector of the stack segment of privilege level 3

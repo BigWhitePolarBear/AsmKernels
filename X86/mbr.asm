@@ -18,16 +18,24 @@ SECTION mbr vstart=0x00007c00
 	mov ebx,edx										; Segment offset address
 
 	; Pass the slot of the 0# descriptor
-	; Create the 1# descriptor, the code segment descriptor in protected mode
+	; Create the 1# descriptor, the code segment descriptor in protected mode, privilege level 0
 	mov dword [ebx+0x08],0x0000ffff					; base=0, limit=0xFFFFF, DPL=00
 	mov dword [ebx+0x0c],0x00cf9800					; 4KB granularity, code segment descriptor, upward expansion
 
-	; Create the 2# descriptor, the data segment descriptor in protected mode
+	; Create the 2# descriptor, the data segment descriptor in protected mode, privilege level 0
 	mov dword [ebx+0x10],0x0000ffff					; base=0, limit=0xFFFFF, DPL=00
 	mov dword [ebx+0x14],0x00cf9200					; 4KB granularity, data segment descriptor, upward expansion
          
+	; Create the 3# descriptor, the code segment descriptor in protected mode, privilege level 3
+	mov dword [ebx+0x18],0x0000ffff					; base=0, limit=0xFFFFF, DPL=11
+	mov dword [ebx+0x1c],0x00cffa00					; 4KB granularity, code segment descriptor, upward expansion
+
+	; Create the 4# descriptor, the data segment descriptor in protected mode, privilege level 3
+	mov dword [ebx+0x20],0x0000ffff					; base=0, limit=0xFFFFF, DPL=11
+	mov dword [ebx+0x24],0x00cff200					; 4KB granularity, data segment descriptor, upward expansion
+
 	; Initialize the descriptor table register GDTR
-	mov word [cs:pgdt],23							; The limit of the descriptor table
+	mov word [cs:pgdt],39							; The limit of the descriptor table
  
 	lgdt [cs:pgdt]
       
@@ -52,7 +60,7 @@ flush:
 	mov fs,eax
 	mov gs,eax
 	mov ss,eax										; Load the stack segment (4GB) selector
-	mov esp,0x7000									; Stack pointer
+	mov esp,0x7c00									; Stack pointer
          
 	; Below is the loading of the system core program
 	mov edi,core_base_address 

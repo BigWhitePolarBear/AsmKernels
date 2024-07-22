@@ -26,7 +26,7 @@ section core_data									; Kernel data segment
 
 	buffer		times 256 db 0
 
-	sys_entry	dq get_screen_row					; #0
+	sys_entries	dq get_screen_row					; #0
 				dq get_cmos_time					; #1
 				dq put_cstringxy64					; #2
 				dq create_process					; #3
@@ -692,7 +692,7 @@ syscall_procedure:									; System call processing process
 
 	push r15
 	mov r15, [rel position]
-	add r15, [r15 + rax * 8 + sys_entry]			; Get the linear address of the specified system call function
+	add r15, [r15 + rax * 8 + sys_entries]			; Get the linear address of the specified system call function
 	call r15
 	pop r15
 
@@ -828,14 +828,13 @@ init:												; Initialization of the working environment of the kernel
 	mov eax, 0x00047700								; Request TF=IF=DF=AC=0; IOPL=00
 	wrmsr
 
-	; The following initializes the Advanced Programmable Interrupt Controller APIC. After the computer starts, the BIOS has done the LAPIC and IOAPIC.
-	; The initialization and creation of related Advanced Configuration and Power Interface (ACPI) entries. Multi-processor and
-	; Intel Architecture Personal Computer (IA-PC) searches and obtains from 1MB physical memory; enables Extensible Firmware
-	; interface (EFI or UEFI) computers need to use the EFI system table pointer passed by EFI to locate relevant tables and obtain from them.
-	; Multi-processor and APIC information. For simplicity, we adopt the former traditional method. Please note the configuration of the virtual machine!
+	; The following initializes the Advanced Programmable Interrupt Controller APIC. After the computer starts,
+	; the BIOS has done the initialization of LAPIC and IOAPIC, and the creation of related Advanced Configuration 
+	; and Power Interface (ACPI) entries. We can get multi-processors and APIC information from ACPI tables.
 
-	; The memory area claimed by ACPI has been saved in our system data area (SDA), and the following reads it out. This memory area may
-	; be located in a part of the paging system that has not been mapped, so the following will first map this part of memory one by one (linear address=physical address)
+	; The memory area claimed by ACPI has been saved in our system data area (SDA), and the following reads it out.
+	; This memory area may be located in a part of the paging system that has not been mapped, so the following will
+	; first map this part of memory one by one (linear address=physical address)
 	cmp word [SDA_PHY_ADDR + 0x16], 0
 	jz .acpi_err									; Incorrect ACPI data, may not support ACPI
 	mov rsi, SDA_PHY_ADDR + 0x18					; System data area: starting address of the address range descriptor structure
@@ -872,13 +871,13 @@ init:												; Initialization of the working environment of the kernel
 	mov rcx, 'RSD PTR '								; Start mark of the structure (note the trailing space)
 	.searc:
 		cmp qword [rbx], rcx
-		je .finda
-		add rbx, 16									;The mark of the structure is always at a 16-byte boundary
+		je .founda
+		add rbx, 16									; The mark of the structure is always at a 16-byte boundary
 		cmp rbx, 0xffff0							; Upper boundary of the low-end 1MB physical memory
 		jl .searc
 		jmp .acpi_err								; Not found RSDP, error shutdown processing.
 
-	.finda:
+	.founda:
 		; RSDT and XSDT both point to MADT, but RSDT gives a 32-bit physical address, while XDST gives a 64-bit physical address.
 		; Only VCPI 2.0 and higher versions have XSDT. Typically, VBox supports ACPI 2.0 while Bochs only supports 1.0
 		cmp byte [rbx + 15], 2						; Detect whether the version of ACPI is 2

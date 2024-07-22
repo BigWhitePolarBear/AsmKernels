@@ -669,8 +669,9 @@ do_task_clean:										; Clear the terminated task and recycle resources
 ;-------------------------------------------------------------------------------
 int_0x88_handler:									; System call processing procedure
 
-	call [eax*4+sys_call]
+	call [eax*4+sys_entries]
 	iretd
+	
 ;===============================================================================
 SECTION core_data vfollows=sys_routine				; Data segment of the system core
 ;------------------------------------------------------------------------------- 
@@ -691,7 +692,7 @@ SECTION core_data vfollows=sys_routine				; Data segment of the system core
 	page_map_len	equ $-page_bit_map
 
 	; System call entries
-	sys_call		dd put_string
+	sys_entries		dd put_string
 					dd read_hard_disk_0
 					dd put_hex_dword
 					dd terminate_current_task

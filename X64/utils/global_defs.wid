@@ -16,7 +16,7 @@
 	COR_PDPT_ADDR		equ	0x00100000					; Page Directory Pointer Table for the kernel starts from this physical address
 
 	LDR_START_SECTOR	equ	1							; Start sector of the kernel loader on the hard disk
-	COR_START_SECTOR	equ	9							; Start sector of the kernel program on the hard disk
+	COR_START_SECTOR	equ	10							; Start sector of the kernel program on the hard disk
 
 	; Virtual memory space starts at linear address 0xffff800000000000
 	UPPER_LINEAR_START	equ	0xffff800000000000
